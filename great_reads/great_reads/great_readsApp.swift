@@ -6,14 +6,26 @@
 //
 
 import SwiftUI
-import SwiftData
+import FirebaseCore
 
 @main
 struct great_readsApp: App {
+    @StateObject private var authManager = AuthManager()
+    
+    init() {
+        // Initialize Firebase
+        FirebaseApp.configure()
+    }
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .modelContainer(for: [Book.self])
+            if authManager.isAuthenticated {
+                ContentView()
+                    .environmentObject(authManager)
+            } else {
+                AuthView()
+                    .environmentObject(authManager)
+            }
         }
     }
 }
