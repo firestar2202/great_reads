@@ -1,11 +1,3 @@
-//
-//  FirestoreBook.swift
-//  great_reads
-//
-//  Created by Justin Haddad on 10/28/25.
-//
-
-
 import Foundation
 import FirebaseFirestore
 import SwiftUI
@@ -18,6 +10,15 @@ struct FirestoreBook: Codable, Identifiable {
     var userId: String
     var createdAt: Date
     
+    // New fields from Google Books
+    var description: String?
+    var coverImageURL: String?
+    var isbn: String?
+    var pageCount: Int?
+    var publishedDate: String?
+    var publisher: String?
+    var googleBooksId: String?
+    
     enum CodingKeys: String, CodingKey {
         case id
         case title
@@ -25,6 +26,13 @@ struct FirestoreBook: Codable, Identifiable {
         case tags
         case userId
         case createdAt
+        case description
+        case coverImageURL
+        case isbn
+        case pageCount
+        case publishedDate
+        case publisher
+        case googleBooksId
     }
     
     // Helper to convert tags to Tag enums

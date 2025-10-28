@@ -42,13 +42,32 @@ class BookManager: ObservableObject {
     }
     
     // Add a new book
-    func addBook(title: String, author: String, tags: [String], userId: String) async throws {
+    func addBook(
+        title: String,
+        author: String,
+        tags: [String],
+        userId: String,
+        description: String? = nil,
+        coverImageURL: String? = nil,
+        isbn: String? = nil,
+        pageCount: Int? = nil,
+        publishedDate: String? = nil,
+        publisher: String? = nil,
+        googleBooksId: String? = nil
+    ) async throws {
         let book = FirestoreBook(
             title: title,
             author: author,
             tags: tags,
             userId: userId,
-            createdAt: Date()
+            createdAt: Date(),
+            description: description,
+            coverImageURL: coverImageURL,
+            isbn: isbn,
+            pageCount: pageCount,
+            publishedDate: publishedDate,
+            publisher: publisher,
+            googleBooksId: googleBooksId
         )
         
         try db.collection("books").addDocument(from: book)

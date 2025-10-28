@@ -85,7 +85,7 @@ struct BooksView: View {
                 }
             }
             .sheet(isPresented: $showingAddBook) {
-                AddBookView(bookManager: bookManager, userId: authManager.currentUserId ?? "")
+                BookSearchView(bookManager: bookManager, userId: authManager.currentUserId ?? "")
             }
             .sheet(isPresented: $showingAddFriend) {
                 AddFriendView(isPresented: $showingAddFriend, userManager: userManager)
@@ -103,21 +103,67 @@ struct BooksView: View {
 // MARK: - Feed View
 struct FeedView: View {
     @ObservedObject var userManager: UserManager
+    @StateObject private var feedManager = FeedManager()
+    @State private var selectedFriend: FirestoreUser?
+    @State private var showingFriendProfile = false
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                Image(systemName: "newspaper")
-                    .font(.system(size: 60))
-                    .foregroundColor(.gray.opacity(0.5))
-                Text("Activity Feed")
-                    .font(.title2)
-                    .foregroundColor(.gray)
-                Text("Coming soon!")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
+            Group {
+                if feedManager.isLoading {
+                    ProgressView()
+                } else if feedManager.activityItems.isEmpty {
+                    // Empty state
+                    VStack(spacing: 16) {
+                        Image(systemName: "newspaper")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray.opacity(0.5))
+                        Text("No Activity Yet")
+                            .font(.title2)
+                            .foregroundColor(.gray)
+                        Text("Add friends to see what they're reading!")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(feedManager.activityItems) { item in
+                                ActivityCard(
+                                    item: item,
+                                    onTapUser: {
+                                        if let friend = item.user {
+                                            selectedFriend = friend
+                                            showingFriendProfile = true
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                        .padding()
+                    }
+                    .refreshable {
+                        if let friendIds = userManager.currentUser?.friends {
+                            await feedManager.fetchFriendActivity(friendIds: friendIds)
+                        }
+                    }
+                }
             }
             .navigationTitle("Feed")
+            .sheet(isPresented: $showingFriendProfile) {
+                if let friend = selectedFriend {
+                    FriendProfileView(friend: friend, userManager: userManager)
+                }
+            }
+            .onAppear {
+                if let friendIds = userManager.currentUser?.friends {
+                    Task {
+                        await feedManager.fetchFriendActivity(friendIds: friendIds)
+                    }
+                }
+            }
         }
     }
 }
@@ -168,14 +214,49 @@ struct FirestoreBookCard: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(book.primaryColor.opacity(0.7))
-                .frame(width: 60, height: 90)
-                .overlay(
-                    Image(systemName: "book.fill")
-                        .foregroundColor(.white.opacity(0.5))
-                        .font(.title2)
-                )
+            // Cover image or placeholder
+            if let imageURL = book.coverImageURL,
+               let url = URL(string: imageURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(book.primaryColor.opacity(0.3))
+                            .frame(width: 60, height: 90)
+                            .overlay(
+                                ProgressView()
+                            )
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 60, height: 90)
+                            .clipped()
+                            .cornerRadius(8)
+                    case .failure:
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(book.primaryColor.opacity(0.7))
+                            .frame(width: 60, height: 90)
+                            .overlay(
+                                Image(systemName: "book.fill")
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .font(.title2)
+                            )
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                // Fallback placeholder for books without images
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(book.primaryColor.opacity(0.7))
+                    .frame(width: 60, height: 90)
+                    .overlay(
+                        Image(systemName: "book.fill")
+                            .foregroundColor(.white.opacity(0.5))
+                            .font(.title2)
+                    )
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(book.title)
@@ -212,108 +293,6 @@ struct FirestoreBookCard: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
-    }
-}
-
-// MARK: - Add Book View
-struct AddBookView: View {
-    @Environment(\.dismiss) private var dismiss
-    let bookManager: BookManager
-    let userId: String
-    
-    @State private var title = ""
-    @State private var author = ""
-    @State private var selectedTags: Set<Tag> = []
-    @State private var isLoading = false
-    
-    let columns = [GridItem(.adaptive(minimum: 100))]
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Book Details")) {
-                    TextField("Title", text: $title)
-                    TextField("Author", text: $author)
-                }
-                
-                Section(header: Text("Tags (select up to 3)")) {
-                    LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(Tag.allCases, id: \.self) { tag in
-                            TagButton(
-                                tag: tag,
-                                isSelected: selectedTags.contains(tag),
-                                onTap: { toggleTag(tag) }
-                            )
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-                
-                Section {
-                    Button("Add Book") {
-                        addBook()
-                    }
-                    .disabled(title.isEmpty || author.isEmpty || selectedTags.isEmpty || isLoading)
-                    .frame(maxWidth: .infinity)
-                    .foregroundColor(title.isEmpty || author.isEmpty || selectedTags.isEmpty ? .gray : .blue)
-                }
-            }
-            .navigationTitle("Add Book")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-    
-    private func toggleTag(_ tag: Tag) {
-        if selectedTags.contains(tag) {
-            selectedTags.remove(tag)
-        } else if selectedTags.count < 3 {
-            selectedTags.insert(tag)
-        }
-    }
-    
-    private func addBook() {
-        isLoading = true
-        Task {
-            let tagStrings = selectedTags.map { $0.rawValue }
-            try? await bookManager.addBook(
-                title: title,
-                author: author,
-                tags: tagStrings,
-                userId: userId
-            )
-            isLoading = false
-            dismiss()
-        }
-    }
-}
-
-// MARK: - Tag Button
-struct TagButton: View {
-    let tag: Tag
-    let isSelected: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            Text(tag.rawValue.capitalized)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isSelected ? .white : tag.color)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(isSelected ? tag.color : tag.color.opacity(0.2))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(tag.color, lineWidth: isSelected ? 0 : 1)
-                )
-        }
     }
 }
 
@@ -463,6 +442,124 @@ struct UserRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Activity Card
+struct ActivityCard: View {
+    let item: ActivityItem
+    let onTapUser: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // User info header
+            HStack {
+                Button(action: onTapUser) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Text(item.user?.username.prefix(1).uppercased() ?? "?")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.blue)
+                            )
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.user?.username ?? "Unknown")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.primary)
+                            
+                            Text(item.timeAgo)
+                                .font(.system(size: 12))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                Text("added")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+            }
+            
+            // Book info
+            HStack(spacing: 12) {
+                // Cover image or placeholder
+                if let imageURL = item.book.coverImageURL,
+                   let url = URL(string: imageURL) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(item.book.primaryColor.opacity(0.3))
+                                .frame(width: 50, height: 75)
+                                .overlay(
+                                    ProgressView()
+                                )
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 50, height: 75)
+                                .clipped()
+                                .cornerRadius(6)
+                        case .failure:
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(item.book.primaryColor.opacity(0.7))
+                                .frame(width: 50, height: 75)
+                                .overlay(
+                                    Image(systemName: "book.fill")
+                                        .foregroundColor(.white.opacity(0.5))
+                                        .font(.title3)
+                                )
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                } else {
+                    // Fallback placeholder for books without images
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(item.book.primaryColor.opacity(0.7))
+                        .frame(width: 50, height: 75)
+                        .overlay(
+                            Image(systemName: "book.fill")
+                                .foregroundColor(.white.opacity(0.5))
+                                .font(.title3)
+                        )
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.book.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(2)
+                    
+                    Text("by \(item.book.author)")
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                    
+                    if !item.book.tagEnums.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(item.book.tagEnums.prefix(2), id: \.self) { tag in
+                                Text(tag.rawValue.capitalized)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(tag.color)
+                                    .cornerRadius(4)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
