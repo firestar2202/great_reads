@@ -1,8 +1,10 @@
 import SwiftUI
 
-struct ContentView: View {
-    @EnvironmentObject var authManager: AuthManager
-    @StateObject private var bookManager = BookManager()
+// MARK: - Books View
+struct BooksView: View {
+    @ObservedObject var bookManager: BookManager
+    @ObservedObject var userManager: UserManager
+    @ObservedObject var authManager: AuthManager
     
     @State private var showingAddBook = false
     @State private var showingAddFriend = false
@@ -86,20 +88,7 @@ struct ContentView: View {
                 AddBookView(bookManager: bookManager, userId: authManager.currentUserId ?? "")
             }
             .sheet(isPresented: $showingAddFriend) {
-                AddFriendView(isPresented: $showingAddFriend)
-            }
-            .onAppear {
-                if let userId = authManager.currentUserId {
-                    bookManager.fetchUserBooks(userId: userId)
-                    
-                    // Add example books only if user has none (checked in Firestore)
-                    Task {
-                        try? await bookManager.addExampleBooksIfNeeded(userId: userId)
-                    }
-                }
-            }
-            .onDisappear {
-                bookManager.stopListening()
+                AddFriendView(isPresented: $showingAddFriend, userManager: userManager)
             }
         }
     }
@@ -111,14 +100,74 @@ struct ContentView: View {
     }
 }
 
-// Book card component for Firestore books
+// MARK: - Feed View
+struct FeedView: View {
+    @ObservedObject var userManager: UserManager
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                Image(systemName: "newspaper")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray.opacity(0.5))
+                Text("Activity Feed")
+                    .font(.title2)
+                    .foregroundColor(.gray)
+                Text("Coming soon!")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            .navigationTitle("Feed")
+        }
+    }
+}
+
+// MARK: - Main Content View
+struct ContentView: View {
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var bookManager = BookManager()
+    @StateObject private var userManager = UserManager()
+    
+    var body: some View {
+        TabView {
+            BooksView(bookManager: bookManager, userManager: userManager, authManager: authManager)
+                .tabItem {
+                    Label("Books", systemImage: "book.fill")
+                }
+            
+            FriendsListView(userManager: userManager)
+                .tabItem {
+                    Label("Friends", systemImage: "person.2.fill")
+                }
+            
+            FeedView(userManager: userManager)
+                .tabItem {
+                    Label("Feed", systemImage: "list.bullet")
+                }
+        }
+        .onAppear {
+            if let userId = authManager.currentUserId {
+                bookManager.fetchUserBooks(userId: userId)
+                
+                Task {
+                    try? await userManager.fetchUserProfile(userId: userId)
+                }
+                
+                Task {
+                    try? await bookManager.addExampleBooksIfNeeded(userId: userId)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Book Card
 struct FirestoreBookCard: View {
     let book: FirestoreBook
     let onDelete: () -> Void
     
     var body: some View {
         HStack(spacing: 16) {
-            // Book cover placeholder
             RoundedRectangle(cornerRadius: 8)
                 .fill(book.primaryColor.opacity(0.7))
                 .frame(width: 60, height: 90)
@@ -128,7 +177,6 @@ struct FirestoreBookCard: View {
                         .font(.title2)
                 )
             
-            // Book info
             VStack(alignment: .leading, spacing: 4) {
                 Text(book.title)
                     .font(.system(size: 16, weight: .semibold))
@@ -138,7 +186,6 @@ struct FirestoreBookCard: View {
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
                 
-                // Tags
                 if !book.tagEnums.isEmpty {
                     HStack(spacing: 4) {
                         ForEach(book.tagEnums.prefix(3), id: \.self) { tag in
@@ -156,7 +203,6 @@ struct FirestoreBookCard: View {
             
             Spacer()
             
-            // Delete button
             Button(action: onDelete) {
                 Image(systemName: "trash")
                     .foregroundColor(.red)
@@ -169,7 +215,7 @@ struct FirestoreBookCard: View {
     }
 }
 
-// Add Book view with Firestore
+// MARK: - Add Book View
 struct AddBookView: View {
     @Environment(\.dismiss) private var dismiss
     let bookManager: BookManager
@@ -180,9 +226,7 @@ struct AddBookView: View {
     @State private var selectedTags: Set<Tag> = []
     @State private var isLoading = false
     
-    let columns = [
-        GridItem(.adaptive(minimum: 100))
-    ]
+    let columns = [GridItem(.adaptive(minimum: 100))]
     
     var body: some View {
         NavigationView {
@@ -198,9 +242,7 @@ struct AddBookView: View {
                             TagButton(
                                 tag: tag,
                                 isSelected: selectedTags.contains(tag),
-                                onTap: {
-                                    toggleTag(tag)
-                                }
+                                onTap: { toggleTag(tag) }
                             )
                         }
                     }
@@ -231,10 +273,8 @@ struct AddBookView: View {
     private func toggleTag(_ tag: Tag) {
         if selectedTags.contains(tag) {
             selectedTags.remove(tag)
-        } else {
-            if selectedTags.count < 3 {
-                selectedTags.insert(tag)
-            }
+        } else if selectedTags.count < 3 {
+            selectedTags.insert(tag)
         }
     }
     
@@ -254,7 +294,7 @@ struct AddBookView: View {
     }
 }
 
-// Tag button component
+// MARK: - Tag Button
 struct TagButton: View {
     let tag: Tag
     let isSelected: Bool
@@ -277,17 +317,71 @@ struct TagButton: View {
     }
 }
 
-// Placeholder for Add Friend view
+// MARK: - Add Friend View
 struct AddFriendView: View {
     @Binding var isPresented: Bool
+    @ObservedObject var userManager: UserManager
+    
+    @State private var searchQuery = ""
+    @State private var searchResults: [FirestoreUser] = []
+    @State private var isSearching = false
     
     var body: some View {
         NavigationView {
             VStack {
-                Text("Add Friend Form")
-                    .font(.title2)
-                Text("(Coming soon)")
-                    .foregroundColor(.gray)
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    
+                    TextField("Search by username", text: $searchQuery)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onSubmit { searchForUsers() }
+                    
+                    if !searchQuery.isEmpty {
+                        Button(action: {
+                            searchQuery = ""
+                            searchResults = []
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding()
+                
+                Button("Search") {
+                    searchForUsers()
+                }
+                .disabled(searchQuery.isEmpty || isSearching)
+                .padding(.horizontal)
+                
+                if isSearching {
+                    ProgressView().padding()
+                } else if searchResults.isEmpty && !searchQuery.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.fill.questionmark")
+                            .font(.system(size: 50))
+                            .foregroundColor(.gray.opacity(0.5))
+                        Text("No users found")
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(searchResults) { user in
+                        UserRow(
+                            user: user,
+                            currentUserId: userManager.currentUser?.id,
+                            isFriend: userManager.currentUser?.friends.contains(user.id ?? "") ?? false,
+                            onAdd: { addFriend(user) }
+                        )
+                    }
+                }
+                
+                Spacer()
             }
             .navigationTitle("Add Friend")
             .navigationBarTitleDisplayMode(.inline)
@@ -300,8 +394,79 @@ struct AddFriendView: View {
             }
         }
     }
+    
+    private func searchForUsers() {
+        isSearching = true
+        Task {
+            do {
+                searchResults = try await userManager.searchUsers(query: searchQuery)
+                searchResults = searchResults.filter { $0.id != userManager.currentUser?.id }
+            } catch {
+                print("Error searching users: \(error)")
+            }
+            isSearching = false
+        }
+    }
+    
+    private func addFriend(_ user: FirestoreUser) {
+        guard let friendId = user.id else { return }
+        Task {
+            try? await userManager.addFriend(friendId: friendId)
+            searchResults.removeAll { $0.id == friendId }
+        }
+    }
 }
 
+// MARK: - User Row
+struct UserRow: View {
+    let user: FirestoreUser
+    let currentUserId: String?
+    let isFriend: Bool
+    let onAdd: () -> Void
+    
+    var body: some View {
+        HStack {
+            Circle()
+                .fill(Color.blue.opacity(0.2))
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text(user.username.prefix(1).uppercased())
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.blue)
+                )
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.username)
+                    .font(.system(size: 16, weight: .semibold))
+                
+                Text(user.email)
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            if isFriend {
+                Text("Friends")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.green)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+            } else {
+                Button(action: onAdd) {
+                    Image(systemName: "person.badge.plus")
+                        .foregroundColor(.blue)
+                        .padding(8)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Preview
 #Preview {
     ContentView()
         .environmentObject(AuthManager())

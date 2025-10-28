@@ -10,6 +10,8 @@ class BookManager: ObservableObject {
     
     // Fetch books for current user (with real-time updates)
     func fetchUserBooks(userId: String) {
+        print("📚 Setting up listener for user: \(userId)")
+        
         // Remove old listener if exists
         listener?.remove()
         
@@ -18,13 +20,23 @@ class BookManager: ObservableObject {
             .whereField("userId", isEqualTo: userId)
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
-                guard let documents = snapshot?.documents else {
-                    print("Error fetching books: \(error?.localizedDescription ?? "Unknown error")")
+                if let error = error {
+                    print("❌ Error fetching books: \(error.localizedDescription)")
                     return
                 }
                 
-                self?.books = documents.compactMap { doc -> FirestoreBook? in
-                    try? doc.data(as: FirestoreBook.self)
+                guard let documents = snapshot?.documents else {
+                    print("⚠️ No documents found")
+                    return
+                }
+                
+                print("🔄 Listener fired! Found \(documents.count) books")
+                
+                Task { @MainActor in
+                    self?.books = documents.compactMap { doc -> FirestoreBook? in
+                        try? doc.data(as: FirestoreBook.self)
+                    }
+                    print("✅ Updated books array: \(self?.books.count ?? 0) books")
                 }
             }
     }
