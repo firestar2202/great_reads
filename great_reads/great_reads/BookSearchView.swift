@@ -1,11 +1,3 @@
-//
-//  BookSearchView.swift
-//  great_reads
-//
-//  Created by Justin Haddad on 10/28/25.
-//
-
-
 import SwiftUI
 
 struct BookSearchView: View {
@@ -404,7 +396,7 @@ struct BookDetailView: View {
                     author: book.displayAuthors,
                     tags: Array(selectedTags),
                     userId: userId,
-                    description: book.volumeInfo.description,
+                    bookDescription: book.volumeInfo.description,
                     coverImageURL: book.coverImageURL,
                     isbn: book.isbn13 ?? book.isbn10,
                     pageCount: book.volumeInfo.pageCount,

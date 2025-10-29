@@ -1,11 +1,3 @@
-//
-//  FirestoreUser.swift
-//  great_reads
-//
-//  Created by Justin Haddad on 10/28/25.
-//
-
-
 import Foundation
 import FirebaseFirestore
 
@@ -15,6 +7,8 @@ struct FirestoreUser: Codable, Identifiable {
     var email: String
     var createdAt: Date
     var friends: [String] // Array of friend user IDs
+    var currentVibe: String? // AI-generated vibe text
+    var vibeGeneratedAt: Date? // When vibe was last generated
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -22,7 +16,7 @@ struct FirestoreUser: Codable, Identifiable {
         case email
         case createdAt
         case friends
+        case currentVibe
+        case vibeGeneratedAt
     }
 }
-
-

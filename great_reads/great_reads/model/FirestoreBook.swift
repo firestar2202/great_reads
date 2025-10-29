@@ -11,7 +11,7 @@ struct FirestoreBook: Codable, Identifiable {
     var createdAt: Date
     
     // New fields from Google Books
-    var description: String?
+    var bookDescription: String?
     var coverImageURL: String?
     var isbn: String?
     var pageCount: Int?
@@ -26,7 +26,7 @@ struct FirestoreBook: Codable, Identifiable {
         case tags
         case userId
         case createdAt
-        case description
+        case bookDescription
         case coverImageURL
         case isbn
         case pageCount

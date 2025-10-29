@@ -190,6 +190,11 @@ struct ContentView: View {
                 .tabItem {
                     Label("Feed", systemImage: "list.bullet")
                 }
+            
+            VibeView(userManager: userManager)
+                .tabItem {
+                    Label("Vibe", systemImage: "sparkles")
+                }
         }
         .onAppear {
             if let userId = authManager.currentUserId {
