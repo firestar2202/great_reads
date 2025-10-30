@@ -53,7 +53,9 @@ class BookManager: ObservableObject {
         pageCount: Int? = nil,
         publishedDate: String? = nil,
         publisher: String? = nil,
-        googleBooksId: String? = nil
+        googleBooksId: String? = nil,
+        dateRead: Date? = nil,
+        review: String? = nil
     ) async throws {
         let book = FirestoreBook(
             title: title,
@@ -67,7 +69,9 @@ class BookManager: ObservableObject {
             pageCount: pageCount,
             publishedDate: publishedDate,
             publisher: publisher,
-            googleBooksId: googleBooksId
+            googleBooksId: googleBooksId,
+            dateRead: dateRead,
+            review: review
         )
         
         try db.collection("books").addDocument(from: book)

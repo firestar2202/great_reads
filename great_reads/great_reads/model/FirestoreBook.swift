@@ -19,6 +19,12 @@ struct FirestoreBook: Codable, Identifiable {
     var publisher: String?
     var googleBooksId: String?
     
+    // Date read field
+    var dateRead: Date?
+    
+    // Review field
+    var review: String?
+    
     enum CodingKeys: String, CodingKey {
         case id
         case title
@@ -33,6 +39,8 @@ struct FirestoreBook: Codable, Identifiable {
         case publishedDate
         case publisher
         case googleBooksId
+        case dateRead
+        case review
     }
     
     // Helper to convert tags to Tag enums
@@ -43,5 +51,13 @@ struct FirestoreBook: Codable, Identifiable {
     // Helper to get primary color (from first tag)
     var primaryColor: Color {
         tagEnums.first?.color ?? .blue
+    }
+    
+    // Helper to format date read
+    var formattedDateRead: String? {
+        guard let dateRead = dateRead else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: dateRead)
     }
 }

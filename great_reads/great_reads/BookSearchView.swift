@@ -207,23 +207,6 @@ struct BookSearchResultCard: View {
                             .font(.system(size: 12))
                             .foregroundColor(.gray.opacity(0.8))
                     }
-                    
-                    // Show suggested tags
-                    if !book.suggestedTags.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(book.suggestedTags.prefix(2), id: \.self) { tagString in
-                                if let tag = Tag(rawValue: tagString) {
-                                    Text(tag.rawValue.capitalized)
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 2)
-                                        .background(tag.color)
-                                        .cornerRadius(3)
-                                }
-                            }
-                        }
-                    }
                 }
                 
                 Spacer()
@@ -248,10 +231,10 @@ struct BookDetailView: View {
     let onSave: () -> Void
     
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTags: Set<String> = []
     @State private var isSaving = false
-    
-    let columns = [GridItem(.adaptive(minimum: 100))]
+    @State private var dateRead = Date()
+    @State private var showDatePicker = false
+    @State private var review = ""
     
     var body: some View {
         NavigationView {
@@ -312,7 +295,6 @@ struct BookDetailView: View {
                             Text(description)
                                 .font(.system(size: 14))
                                 .foregroundColor(.secondary)
-                                .lineLimit(6)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -320,25 +302,72 @@ struct BookDetailView: View {
                     Divider()
                         .padding(.vertical)
                     
-                    // Tag selection
+                    // Date Read Section
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Select Tags (up to 3)")
+                        Text("When did you read this?")
                             .font(.system(size: 18, weight: .semibold))
                         
-                        Text("Choose tags that describe this book")
+                        Button(action: {
+                            showDatePicker.toggle()
+                        }) {
+                            HStack {
+                                Image(systemName: "calendar")
+                                    .foregroundColor(.blue)
+                                
+                                Text(formatDate(dateRead))
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.primary)
+                                
+                                Spacer()
+                                
+                                Image(systemName: showDatePicker ? "chevron.up" : "chevron.down")
+                                    .foregroundColor(.gray)
+                                    .font(.system(size: 14))
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                        }
+                        
+                        if showDatePicker {
+                            DatePicker(
+                                "Select Date",
+                                selection: $dateRead,
+                                in: ...Date(),
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.graphical)
+                            .labelsHidden()
+                        }
+                    }
+                    
+                    Divider()
+                        .padding(.vertical)
+                    
+                    // Review Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Your Review (Optional)")
+                            .font(.system(size: 18, weight: .semibold))
+                        
+                        Text("Share your thoughts about this book")
                             .font(.system(size: 14))
                             .foregroundColor(.gray)
                         
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(Tag.allCases, id: \.self) { tag in
-                                TagButton(
-                                    tag: tag,
-                                    isSelected: selectedTags.contains(tag.rawValue),
-                                    isDisabled: !selectedTags.contains(tag.rawValue) && selectedTags.count >= 3
-                                ) {
-                                    toggleTag(tag.rawValue)
-                                }
+                        ZStack(alignment: .topLeading) {
+                            if review.isEmpty {
+                                Text("What did you think? Any favorite moments, characters, or quotes?")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.gray.opacity(0.6))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 12)
                             }
+                            
+                            TextEditor(text: $review)
+                                .font(.system(size: 15))
+                                .frame(minHeight: 120)
+                                .scrollContentBackground(.hidden)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(10)
                         }
                     }
                     
@@ -354,10 +383,10 @@ struct BookDetailView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 50)
-                    .background(selectedTags.isEmpty ? Color.gray : Color.blue)
+                    .background(Color.blue)
                     .foregroundColor(.white)
                     .cornerRadius(12)
-                    .disabled(selectedTags.isEmpty || isSaving)
+                    .disabled(isSaving)
                     .padding(.top)
                 }
                 .padding()
@@ -371,19 +400,13 @@ struct BookDetailView: View {
                     }
                 }
             }
-            .onAppear {
-                // Pre-select suggested tags
-                selectedTags = Set(book.suggestedTags.prefix(3))
-            }
         }
     }
     
-    private func toggleTag(_ tag: String) {
-        if selectedTags.contains(tag) {
-            selectedTags.remove(tag)
-        } else if selectedTags.count < 3 {
-            selectedTags.insert(tag)
-        }
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
     
     private func saveBook() {
@@ -394,7 +417,7 @@ struct BookDetailView: View {
                 try await bookManager.addBook(
                     title: book.displayTitle,
                     author: book.displayAuthors,
-                    tags: Array(selectedTags),
+                    tags: [], // Empty array since we're not using tags
                     userId: userId,
                     bookDescription: book.volumeInfo.description,
                     coverImageURL: book.coverImageURL,
@@ -402,7 +425,9 @@ struct BookDetailView: View {
                     pageCount: book.volumeInfo.pageCount,
                     publishedDate: book.volumeInfo.publishedDate,
                     publisher: book.volumeInfo.publisher,
-                    googleBooksId: book.id
+                    googleBooksId: book.id,
+                    dateRead: dateRead,
+                    review: review.isEmpty ? nil : review
                 )
                 
                 onSave()
@@ -412,35 +437,6 @@ struct BookDetailView: View {
             
             isSaving = false
         }
-    }
-}
-
-// MARK: - Tag Button Component
-struct TagButton: View {
-    let tag: Tag
-    let isSelected: Bool
-    let isDisabled: Bool
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            Text(tag.rawValue.capitalized)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isSelected ? .white : tag.color)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? tag.color : Color.clear)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(tag.color, lineWidth: isSelected ? 0 : 2)
-                        )
-                )
-                .opacity(isDisabled ? 0.4 : 1.0)
-        }
-        .disabled(isDisabled)
     }
 }
 

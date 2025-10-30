@@ -12,6 +12,7 @@ struct FriendsListView: View {
     @ObservedObject var userManager: UserManager
     @State private var selectedFriend: FirestoreUser?
     @State private var showingFriendProfile = false
+    @State private var friendBookManagers: [String: BookManager] = [:] // Store book managers by friend ID
     
     var body: some View {
         NavigationView {
@@ -50,13 +51,28 @@ struct FriendsListView: View {
             }
             .navigationTitle("Friends (\(userManager.friends.count))")
             .sheet(isPresented: $showingFriendProfile) {
-                if let friend = selectedFriend {
-                    FriendProfileView(friend: friend, userManager: userManager)
+                if let friend = selectedFriend,
+                   let bookManager = friendBookManagers[friend.id ?? ""] {
+                    FriendProfileView(
+                        friend: friend,
+                        userManager: userManager,
+                        bookManager: bookManager
+                    )
                 }
             }
             .onAppear {
                 Task {
                     try? await userManager.fetchFriends()
+                    
+                    // Preload books for all friends
+                    for friend in userManager.friends {
+                        if let friendId = friend.id,
+                           friendBookManagers[friendId] == nil {
+                            let bookManager = BookManager()
+                            friendBookManagers[friendId] = bookManager
+                            bookManager.fetchUserBooks(userId: friendId)
+                        }
+                    }
                 }
             }
         }
@@ -64,6 +80,11 @@ struct FriendsListView: View {
     
     private func removeFriend(_ friend: FirestoreUser) {
         guard let friendId = friend.id else { return }
+        
+        // Stop listening and remove book manager
+        friendBookManagers[friendId]?.stopListening()
+        friendBookManagers.removeValue(forKey: friendId)
+        
         Task {
             try? await userManager.removeFriend(friendId: friendId)
         }

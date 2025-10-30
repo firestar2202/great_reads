@@ -106,6 +106,7 @@ struct FeedView: View {
     @StateObject private var feedManager = FeedManager()
     @State private var selectedFriend: FirestoreUser?
     @State private var showingFriendProfile = false
+    @State private var friendBookManagers: [String: BookManager] = [:] // Store book managers by friend ID
     
     var body: some View {
         NavigationView {
@@ -153,14 +154,28 @@ struct FeedView: View {
             }
             .navigationTitle("Feed")
             .sheet(isPresented: $showingFriendProfile) {
-                if let friend = selectedFriend {
-                    FriendProfileView(friend: friend, userManager: userManager)
+                if let friend = selectedFriend,
+                   let bookManager = friendBookManagers[friend.id ?? ""] {
+                    FriendProfileView(
+                        friend: friend,
+                        userManager: userManager,
+                        bookManager: bookManager
+                    )
                 }
             }
             .onAppear {
                 if let friendIds = userManager.currentUser?.friends {
                     Task {
                         await feedManager.fetchFriendActivity(friendIds: friendIds)
+                        
+                        // Preload books for all friends
+                        for friendId in friendIds {
+                            if friendBookManagers[friendId] == nil {
+                                let bookManager = BookManager()
+                                friendBookManagers[friendId] = bookManager
+                                bookManager.fetchUserBooks(userId: friendId)
+                            }
+                        }
                     }
                 }
             }
@@ -193,7 +208,7 @@ struct ContentView: View {
             
             VibeView(userManager: userManager)
                 .tabItem {
-                    Label("Vibe", systemImage: "sparkles")
+                    Label("My Vibe", systemImage: "sparkles")
                 }
         }
         .onAppear {
@@ -212,13 +227,17 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Book Card
+// MARK: - Book Card (NO TAGS)
 struct FirestoreBookCard: View {
     let book: FirestoreBook
     let onDelete: () -> Void
+    @State private var showingDetail = false
     
     var body: some View {
-        HStack(spacing: 16) {
+        Button(action: {
+            showingDetail = true
+        }) {
+            HStack(spacing: 16) {
             // Cover image or placeholder
             if let imageURL = book.coverImageURL,
                let url = URL(string: imageURL) {
@@ -226,7 +245,7 @@ struct FirestoreBookCard: View {
                     switch phase {
                     case .empty:
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(book.primaryColor.opacity(0.3))
+                            .fill(Color.blue.opacity(0.3))
                             .frame(width: 60, height: 90)
                             .overlay(
                                 ProgressView()
@@ -240,7 +259,7 @@ struct FirestoreBookCard: View {
                             .cornerRadius(8)
                     case .failure:
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(book.primaryColor.opacity(0.7))
+                            .fill(Color.blue.opacity(0.7))
                             .frame(width: 60, height: 90)
                             .overlay(
                                 Image(systemName: "book.fill")
@@ -254,7 +273,7 @@ struct FirestoreBookCard: View {
             } else {
                 // Fallback placeholder for books without images
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(book.primaryColor.opacity(0.7))
+                    .fill(Color.blue.opacity(0.7))
                     .frame(width: 60, height: 90)
                     .overlay(
                         Image(systemName: "book.fill")
@@ -272,18 +291,16 @@ struct FirestoreBookCard: View {
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
                 
-                if !book.tagEnums.isEmpty {
+                if let dateReadText = book.formattedDateRead {
                     HStack(spacing: 4) {
-                        ForEach(book.tagEnums.prefix(3), id: \.self) { tag in
-                            Text(tag.rawValue.capitalized)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(tag.color)
-                                .cornerRadius(4)
-                        }
+                        Image(systemName: "calendar")
+                            .font(.system(size: 10))
+                            .foregroundColor(.gray)
+                        Text(dateReadText)
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
                     }
+                    .padding(.top, 2)
                 }
             }
             
@@ -294,10 +311,114 @@ struct FirestoreBookCard: View {
                     .foregroundColor(.red)
                     .padding(8)
             }
+            .buttonStyle(.plain)
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showingDetail) {
+            BookDetailSheet(book: book)
+        }
+    }
+}
+
+// MARK: - Book Detail Sheet
+struct BookDetailSheet: View {
+    let book: FirestoreBook
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Cover image
+                    if let imageURL = book.coverImageURL,
+                       let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxHeight: 300)
+                            default:
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.blue.opacity(0.3))
+                                    .frame(height: 300)
+                                    .overlay(
+                                        Image(systemName: "book.fill")
+                                            .font(.system(size: 60))
+                                            .foregroundColor(.gray)
+                                    )
+                            }
+                        }
+                        .cornerRadius(12)
+                        .shadow(radius: 10)
+                        .frame(maxWidth: .infinity)
+                    }
+                    
+                    // Book info
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(book.title)
+                            .font(.system(size: 24, weight: .bold))
+                        
+                        Text("by \(book.author)")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray)
+                        
+                        if let dateReadText = book.formattedDateRead {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .foregroundColor(.blue)
+                                Text("Read on \(dateReadText)")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 4)
+                        }
+                    }
+                    
+                    if let description = book.bookDescription {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Description")
+                                .font(.system(size: 18, weight: .semibold))
+                            
+                            Text(description)
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 8)
+                    }
+                    
+                    if let review = book.review, !review.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Your Review")
+                                .font(.system(size: 18, weight: .semibold))
+                            
+                            Text(review)
+                                .font(.system(size: 15))
+                                .foregroundColor(.primary)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(10)
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Book Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -450,10 +571,11 @@ struct UserRow: View {
     }
 }
 
-// MARK: - Activity Card
+// MARK: - Activity Card (NO TAGS)
 struct ActivityCard: View {
     let item: ActivityItem
     let onTapUser: () -> Void
+    @State private var showingBookDetail = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -490,81 +612,234 @@ struct ActivityCard: View {
             }
             
             // Book info
-            HStack(spacing: 12) {
-                // Cover image or placeholder
-                if let imageURL = item.book.coverImageURL,
-                   let url = URL(string: imageURL) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(item.book.primaryColor.opacity(0.3))
-                                .frame(width: 50, height: 75)
-                                .overlay(
-                                    ProgressView()
-                                )
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 50, height: 75)
-                                .clipped()
-                                .cornerRadius(6)
-                        case .failure:
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(item.book.primaryColor.opacity(0.7))
-                                .frame(width: 50, height: 75)
-                                .overlay(
-                                    Image(systemName: "book.fill")
-                                        .foregroundColor(.white.opacity(0.5))
-                                        .font(.title3)
-                                )
-                        @unknown default:
-                            EmptyView()
-                        }
-                    }
-                } else {
-                    // Fallback placeholder for books without images
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(item.book.primaryColor.opacity(0.7))
-                        .frame(width: 50, height: 75)
-                        .overlay(
-                            Image(systemName: "book.fill")
-                                .foregroundColor(.white.opacity(0.5))
-                                .font(.title3)
-                        )
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.book.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(2)
-                    
-                    Text("by \(item.book.author)")
-                        .font(.system(size: 13))
-                        .foregroundColor(.gray)
-                    
-                    if !item.book.tagEnums.isEmpty {
-                        HStack(spacing: 4) {
-                            ForEach(item.book.tagEnums.prefix(2), id: \.self) { tag in
-                                Text(tag.rawValue.capitalized)
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(tag.color)
-                                    .cornerRadius(4)
+            Button(action: {
+                showingBookDetail = true
+            }) {
+                HStack(spacing: 12) {
+                    // Cover image or placeholder
+                    if let imageURL = item.book.coverImageURL,
+                       let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.blue.opacity(0.3))
+                                    .frame(width: 50, height: 75)
+                                    .overlay(
+                                        ProgressView()
+                                    )
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 50, height: 75)
+                                    .clipped()
+                                    .cornerRadius(6)
+                            case .failure:
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.blue.opacity(0.7))
+                                    .frame(width: 50, height: 75)
+                                    .overlay(
+                                        Image(systemName: "book.fill")
+                                            .foregroundColor(.white.opacity(0.5))
+                                            .font(.title3)
+                                    )
+                            @unknown default:
+                                EmptyView()
                             }
                         }
+                    } else {
+                        // Fallback placeholder for books without images
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.blue.opacity(0.7))
+                            .frame(width: 50, height: 75)
+                            .overlay(
+                                Image(systemName: "book.fill")
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .font(.title3)
+                            )
                     }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.book.title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .lineLimit(2)
+                            .foregroundColor(.primary)
+                        
+                        Text("by \(item.book.author)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray)
+                        
+                        if let dateReadText = item.book.formattedDateRead {
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.gray)
+                                Text(dateReadText)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.top, 2)
+                        }
+                        
+                        if let review = item.book.review, !review.isEmpty {
+                            HStack(alignment: .top, spacing: 4) {
+                                Image(systemName: "quote.bubble.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(.blue)
+                                Text(firstSentence(of: review))
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.blue)
+                                    .lineLimit(2)
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
                 }
-                
-                Spacer()
             }
+            .buttonStyle(.plain)
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        .sheet(isPresented: $showingBookDetail) {
+            FeedBookDetailSheet(book: item.book, user: item.user)
+        }
+    }
+    
+    private func firstSentence(of text: String) -> String {
+        // Find the first sentence (ending with . ! or ?)
+        let sentenceEndings: Set<Character> = [".", "!", "?"]
+        
+        if let endIndex = text.firstIndex(where: { sentenceEndings.contains($0) }) {
+            let sentence = text[...endIndex]
+            return String(sentence).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        // If no sentence ending found, return first 100 characters
+        let preview = String(text.prefix(100))
+        return preview.trimmingCharacters(in: .whitespacesAndNewlines) + (text.count > 100 ? "..." : "")
+    }
+}
+
+// MARK: - Feed Book Detail Sheet
+struct FeedBookDetailSheet: View {
+    let book: FirestoreBook
+    let user: FirestoreUser?
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Cover image
+                    if let imageURL = book.coverImageURL,
+                       let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxHeight: 300)
+                            default:
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.blue.opacity(0.3))
+                                    .frame(height: 300)
+                                    .overlay(
+                                        Image(systemName: "book.fill")
+                                            .font(.system(size: 60))
+                                            .foregroundColor(.gray)
+                                    )
+                            }
+                        }
+                        .cornerRadius(12)
+                        .shadow(radius: 10)
+                        .frame(maxWidth: .infinity)
+                    }
+                    
+                    // Book info
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(book.title)
+                            .font(.system(size: 24, weight: .bold))
+                        
+                        Text("by \(book.author)")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray)
+                        
+                        if let dateReadText = book.formattedDateRead {
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .foregroundColor(.blue)
+                                Text("Read on \(dateReadText)")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 4)
+                        }
+                        
+                        if let username = user?.username {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.circle")
+                                    .foregroundColor(.blue)
+                                Text("Added by \(username)")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
+                    
+                    if let description = book.bookDescription {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Description")
+                                .font(.system(size: 18, weight: .semibold))
+                            
+                            Text(description)
+                                .font(.system(size: 15))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 8)
+                    }
+                    
+                    if let review = book.review, !review.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let username = user?.username {
+                                Text("\(username)'s Review")
+                                    .font(.system(size: 18, weight: .semibold))
+                            } else {
+                                Text("Review")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
+                            
+                            Text(review)
+                                .font(.system(size: 15))
+                                .foregroundColor(.primary)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(10)
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Book Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 

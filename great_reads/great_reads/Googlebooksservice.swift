@@ -169,6 +169,31 @@ class GoogleBooksService: ObservableObject {
     
     private let baseURL = "https://www.googleapis.com/books/v1/volumes"
     
+    // Smart query formatting to detect author vs title searches
+    private func formatSearchQuery(_ query: String) -> String {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let words = trimmed.split(separator: " ")
+        
+        // Heuristics to detect if this is likely an author name:
+        // - 2-4 words (typical name length)
+        // - First word is capitalized (proper noun)
+        // - Doesn't contain common title words
+        let commonTitleWords = ["the", "a", "an", "of", "and", "in", "on", "at", "to", "for"]
+        let lowercasedQuery = trimmed.lowercased()
+        let hasCommonTitleWord = commonTitleWords.contains { lowercasedQuery.contains($0) }
+        
+        let firstWordCapitalized = words.first?.first?.isUppercase ?? false
+        let wordCount = words.count
+        
+        // If it looks like a person's name, use author search
+        if wordCount >= 2 && wordCount <= 4 && firstWordCapitalized && !hasCommonTitleWord {
+            return "inauthor:\(trimmed)"
+        }
+        
+        // Otherwise, do a general search (searches title, author, description)
+        return trimmed
+    }
+    
     // Search for books
     func searchBooks(query: String) async {
         guard !query.isEmpty else {
@@ -179,8 +204,11 @@ class GoogleBooksService: ObservableObject {
         isSearching = true
         errorMessage = nil
         
+        // Smart search: format query to detect author vs title
+        let searchQuery = formatSearchQuery(query)
+        
         // Encode the query
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+        guard let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
             errorMessage = "Invalid search query"
             isSearching = false
             return
@@ -216,6 +244,7 @@ class GoogleBooksService: ObservableObject {
             if let firstBook = searchResults.first {
                 print("📚 First book: \(firstBook.displayTitle)")
                 print("🖼️ Image URL: \(firstBook.coverImageURL ?? "No image")")
+                print("🔍 Search query used: \(searchQuery)")
             }
             
             if searchResults.isEmpty {
