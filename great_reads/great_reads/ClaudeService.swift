@@ -9,9 +9,8 @@ struct ClaudeResponse: Codable {
 }
 
 class ClaudeService {
-    // TODO: Replace with your actual API key
-    // Get one at: https://console.anthropic.com/
-    private let apiKey = "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"
+    // API key stored in Config.swift (which is gitignored)
+    private let apiKey = Config.claudeAPIKey
     private let apiURL = "https://api.anthropic.com/v1/messages"
     
     func generateVibe(from books: [FirestoreBook]) async throws -> String {
