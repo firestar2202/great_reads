@@ -41,20 +41,6 @@ struct VibeView: View {
                         .padding(.horizontal)
                         .padding(.top, 20)
                         
-                        // Books used section
-                        if !vibeManager.recentBooks.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Based on your last \(vibeManager.recentBooks.count) books")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.gray)
-                                    .padding(.horizontal)
-                                
-                                ForEach(vibeManager.recentBooks) { book in
-                                    VibeBookRow(book: book)
-                                }
-                            }
-                        }
-                        
                         // Regenerate button
                         Button(action: {
                             regenerateVibe()
@@ -72,6 +58,20 @@ struct VibeView: View {
                         }
                         .padding()
                         .disabled(vibeManager.isGenerating)
+                        
+                        // Books used section
+                        if !vibeManager.recentBooks.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Based on your last \(vibeManager.recentBooks.count) books")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal)
+                                
+                                ForEach(vibeManager.recentBooks) { book in
+                                    VibeBookRow(book: book)
+                                }
+                            }
+                        }
                         
                     } else {
                         // No vibe yet - empty state

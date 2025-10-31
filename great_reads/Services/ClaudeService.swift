@@ -26,25 +26,21 @@ class ClaudeService {
         }
         
         let prompt = """
-        Based on these \(books.count) books that someone has read recently, write a 2-sentence poetic "vibe" that captures their reading personality and taste.
+        Based on these \(books.count) books that someone has read recently, write a 1-sentence poetic "vibe" that captures their reading personality and taste.
         
         The vibe should be:
-        - Poetic and atmospheric
-        - Describe their reading personality/aesthetic
+        - Written in second person "You are ... "
+        - Describe their reading personality/aesthetic based on the books
+        - be specific to the stories, don't write something too vague.
         - NOT a list of genres or book titles
         - Creative and evocative
+        - NOT contain any book titles
         
-        Examples of good vibes:
-        "You drift through shadowed corridors of the mind, drawn to stories where silence speaks louder than words. Your shelves whisper of broken things made beautiful."
-        
-        "Deeply poetic, wild hair, and a penchant for all things broodingly intense. You chase storms through pages and find comfort in the chaos."
-        
-        "Tracing echoes through the empty halls, whispers of dreams that never left their beds. You're drawn to the quiet spaces between heartbeats."
         
         Here are their recent books:
         \(booksText)
         
-        Generate the 2-sentence vibe now (ONLY the vibe, no other text):
+        Generate the 1-sentence vibe now (ONLY the vibe, no other text):
         """
         
         var request = URLRequest(url: URL(string: apiURL)!)
