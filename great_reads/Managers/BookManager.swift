@@ -11,7 +11,7 @@ class BookManager: ObservableObject {
     // Fetch books for current user (with real-time updates)
     func fetchUserBooks(userId: String) {
         print("📚 Setting up listener for user: \(userId)")
-        
+         
         // Remove old listener if exists
         listener?.remove()
         

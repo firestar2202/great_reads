@@ -13,77 +13,59 @@ A social reading tracker app with vibe analysis - like Spotify Wrapped, but for 
 ## Tech Stack
 
 - **SwiftUI** - iOS interface
-- **Firebase Authentication** - User accounts
-- **Firebase Firestore** - Cloud database
-- **Xcode** - Development environment
+- **Firebase** - Authentication & Firestore database
+- **Claude API** - AI-powered vibe analysis
 
 ## Setup Instructions
 
-### Prerequisites
-
-- macOS with Xcode installed
-- Firebase account (free tier works)
-
-### 1. Clone the Repository
-
+### 1. Clone and Open
 ```bash
 git clone https://github.com/firestar2202/great_reads.git
 cd great_reads
-```
-
-### 2. Open in Xcode
-
-```bash
 open great_reads/great_reads.xcodeproj
 ```
 
-### 3. Install Dependencies
+### 2. Install Dependencies
 
-Xcode should automatically resolve Swift Package dependencies when you open the project. If not:
+Xcode should auto-resolve packages. If not, add Firebase SDK manually:
+- **File** → **Add Package Dependencies**
+- URL: `https://github.com/firebase/firebase-ios-sdk`
+- Select: FirebaseAuth, FirebaseFirestore, FirebaseCore
 
-1. Go to **File** → **Add Package Dependencies**
-2. Add Firebase SDK: `https://github.com/firebase/firebase-ios-sdk`
-3. Select these products:
-   - FirebaseAuth
-   - FirebaseFirestore
-   - FirebaseCore
+### 3. Firebase Setup
 
-### 4. Firebase Setup
+1. Create a project at [Firebase Console](https://console.firebase.google.com/)
+2. Add iOS app with your bundle ID
+3. Download `GoogleService-Info.plist` and drag into Xcode
+4. Enable **Firestore Database** (test mode)
+5. Enable **Email/Password** authentication
 
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Create a new project (or use existing)
-3. Add an iOS app with your bundle ID (found in Xcode project settings)
-4. Download `GoogleService-Info.plist`
-5. Drag it into your Xcode project (make sure "Copy items if needed" is checked)
+### 4. API Keys Setup
 
-### 5. Enable Firestore
+Create `Config.swift` in the `great_reads` folder:
+```swift
+import Foundation
 
-In Firebase Console:
-1. Go to **Firestore Database**
-2. Click **Create database**
-3. Start in **test mode** (we'll add security rules later)
-4. Choose a location
+struct Config {
+    static let claudeAPIKey = "YOUR_CLAUDE_API_KEY_HERE"
+}
+```
 
-### 6. Enable Authentication
+Get your Claude API key from [console.anthropic.com](https://console.anthropic.com/)
 
-In Firebase Console:
-1. Go to **Authentication**
-2. Click **Get started**
-3. Enable **Email/Password** sign-in method
+**Note**: `Config.swift` is gitignored and never committed. Each developer needs their own copy.
 
-### 7. Run the App
+### 5. Run
 
-Press **Cmd + R** or click the Play button in Xcode.
+Press **Cmd + R** in Xcode!
 
 ## Project Structure
-
 ```
 great_reads/
 ├── great_reads/
-│   ├── ContentView.swift         # Main book library view
-│   ├── AuthView.swift            # Login/signup screen
-│   ├── AuthManager.swift         # Authentication logic
-│   ├── BookManager.swift         # Firestore book operations
-│   ├── FirestoreBook.swift       # Book data model
-│   └── great_readsApp.swift      # App entry point
+│   ├── ContentView.swift         # Main library view
+│   ├── AuthView.swift            # Login/signup
+│   ├── AuthManager.swift         # Auth logic
+│   ├── BookManager.swift         # Firestore operations
+│   └── Config.swift              # API keys (gitignored)
 ```
