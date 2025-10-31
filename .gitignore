@@ -1,9 +1,1 @@
-# Xcode
-*.xcuserstate
-xcuserdata/
-.DS_Store
-
-# Config with API keys
-config.swift
-Config.swift
 great_reads/Config.swift
