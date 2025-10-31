@@ -6,3 +6,4 @@ xcuserdata/
 # Config with API keys
 config.swift
 Config.swift
+great_reads/Config.swift
