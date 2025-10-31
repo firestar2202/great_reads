@@ -14,35 +14,77 @@ class ClaudeService {
     private let apiURL = "https://api.anthropic.com/v1/messages"
     
     func generateVibe(from books: [FirestoreBook]) async throws -> String {
-        // Build the prompt with book summaries
+        print("\n═══════════════════════════════════════════════════════════")
+        print("🎨 GENERATING VIBE")
+        print("═══════════════════════════════════════════════════════════")
+        print("📚 Processing \(books.count) books\n")
+        
+        // Collect all book summaries
         var booksText = ""
         for (index, book) in books.enumerated() {
-            booksText += "\n\(index + 1). \(book.title) by \(book.author)"
+            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("📖 Book \(index + 1)/\(books.count): \"\(book.title)\" by \(book.author)")
+            
             if let description = book.bookDescription {
-                // Limit description to first 200 chars to save tokens
-                let shortDesc = String(description.prefix(200))
-                booksText += "\nSummary: \(shortDesc)...\n"
+                print("📝 Description:")
+                print("   \(description)\n")
+                
+                booksText += "\n\(index + 1). \"\(book.title)\" by \(book.author)\n"
+                booksText += "   \(description)\n"
+            } else {
+                print("⚠️  NO DESCRIPTION - Skipping this book\n")
             }
         }
         
+        print("═══════════════════════════════════════════════════════════")
+        print("📤 Sending all book summaries to Claude in ONE API call...")
+        print("═══════════════════════════════════════════════════════════\n")
+        
         let prompt = """
-        Based on these \(books.count) books that someone has read recently, write a 1-sentence poetic "vibe" that captures their reading personality and taste.
+        Based on these book descriptions someone has read recently, write out what vibe they give off.
         
         The vibe should be:
         - Written in second person "You are ... "
-        - Describe their reading personality/aesthetic based on the books
-        - be specific to the stories, don't write something too vague.
+        - Relatively concise (5-15 words)
+        - Match the tone of the books they are reading
         - NOT a list of genres or book titles
-        - Creative and evocative
-        - NOT contain any book titles
         
-        
-        Here are their recent books:
+        Here are the books:
         \(booksText)
         
-        Generate the 1-sentence vibe now (ONLY the vibe, no other text):
+        Output ONLY the vibe sentence with no additional text:
         """
         
+        print("📝 Full prompt being sent:")
+        print("──────────────────────────────────────────────────")
+        print(prompt)
+        print("──────────────────────────────────────────────────\n")
+        
+        let response = try await makeAPIRequest(
+            prompt: prompt,
+            maxTokens: 150
+        )
+        
+        // Extract only the first sentence
+        let trimmedResponse = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstSentence = trimmedResponse.components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmedResponse
+        
+        // Add period if needed
+        let finalVibe = firstSentence.hasSuffix(".") || firstSentence.hasSuffix("!") || firstSentence.hasSuffix("?") 
+            ? firstSentence 
+            : firstSentence + "."
+        
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print("✨ FINAL VIBE:")
+        print("   \(finalVibe)")
+        print("═══════════════════════════════════════════════════════════\n")
+        
+        return finalVibe
+    }
+    
+    private func makeAPIRequest(prompt: String, maxTokens: Int) async throws -> String {
         var request = URLRequest(url: URL(string: apiURL)!)
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
@@ -51,7 +93,7 @@ class ClaudeService {
         
         let body: [String: Any] = [
             "model": "claude-3-haiku-20240307",
-            "max_tokens": 150,
+            "max_tokens": maxTokens,
             "messages": [
                 ["role": "user", "content": prompt]
             ]
@@ -64,14 +106,21 @@ class ClaudeService {
         // Check for HTTP errors
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
             let errorMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ API Error: HTTP \(httpResponse.statusCode)")
+            print("   \(errorMessage)")
             throw NSError(domain: "ClaudeAPI", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage])
         }
         
         let claudeResponse = try JSONDecoder().decode(ClaudeResponse.self, from: data)
-        guard let vibe = claudeResponse.content.first?.text else {
+        guard let text = claudeResponse.content.first?.text else {
+            print("❌ No response from API")
             throw NSError(domain: "ClaudeAPI", code: -1, userInfo: [NSLocalizedDescriptionKey: "No response from API"])
         }
         
-        return vibe.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("📥 Received from Claude:")
+        print("   \(text)\n")
+        
+        return text
     }
 }
+
