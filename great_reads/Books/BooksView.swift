@@ -73,8 +73,20 @@ struct BooksView: View {
                     }
                 }
             }
-            .navigationTitle("My Books")
+            .navigationTitle("")
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 12) {
+                        Image("AppIconImage")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 52, height: 52)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        Text("Great Reads")
+                            .font(.system(size: 32, weight: .bold))
+                    }
+                    .padding(.vertical, 8)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         try? authManager.signOut()
@@ -88,7 +100,7 @@ struct BooksView: View {
                 BookSearchView(bookManager: bookManager, userId: authManager.currentUserId ?? "")
             }
             .sheet(isPresented: $showingAddFriend) {
-                AddFriendView(isPresented: $showingAddFriend, userManager: userManager)
+                AddFriendView(isPresented: $showingAddFriend, userManager: userManager, authManager: authManager)
             }
         }
     }

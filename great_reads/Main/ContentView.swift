@@ -12,7 +12,7 @@ struct ContentView: View {
                     Label("Books", systemImage: "book.fill")
                 }
             
-            FriendsListView(userManager: userManager)
+            FriendsListView(userManager: userManager, authManager: authManager)
                 .tabItem {
                     Label("Friends", systemImage: "person.2.fill")
                 }
@@ -39,7 +39,6 @@ struct ContentView: View {
         
         Task {
             try? await userManager.fetchUserProfile(userId: userId)
-            try? await bookManager.addExampleBooksIfNeeded(userId: userId)
         }
     }
 }
