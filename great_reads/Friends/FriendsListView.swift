@@ -171,15 +171,13 @@ struct FriendsListView: View {
                 }
             }
             .navigationTitle("Friends")
-            .sheet(isPresented: $showingFriendProfile) {
-                if let friend = selectedFriend,
-                   let bookManager = friendBookManagers[friend.id ?? ""] {
-                    FriendProfileView(
-                        friend: friend,
-                        userManager: userManager,
-                        bookManager: bookManager
-                    )
-                }
+            .sheet(item: $selectedFriend) { friend in
+                let bookManager = getOrCreateBookManager(for: friend)
+                FriendProfileView(
+                    friend: friend,
+                    userManager: userManager,
+                    bookManager: bookManager
+                )
             }
             .onAppear {
                 Task {
@@ -228,6 +226,21 @@ struct FriendsListView: View {
                 }
             }
         }
+    }
+    
+    private func getOrCreateBookManager(for friend: FirestoreUser) -> BookManager {
+        guard let friendId = friend.id else {
+            return BookManager()
+        }
+        
+        if let existing = friendBookManagers[friendId] {
+            return existing
+        }
+        
+        let bookManager = BookManager()
+        friendBookManagers[friendId] = bookManager
+        bookManager.fetchUserBooks(userId: friendId)
+        return bookManager
     }
     
     private func removeFriend(_ friend: FirestoreUser) {
